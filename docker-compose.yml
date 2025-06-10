@@ -1,0 +1,71 @@
+# docker-compose.yml
+version: '3.8' # Specify a recent Docker Compose file format version
+
+services:
+  # Service for your FastAPI Backend
+  backend:
+    build:
+      context: ./Backend2 # Point to your Backend2 directory where Dockerfile is located
+      dockerfile: Dockerfile # Specify the Dockerfile name
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000 (FastAPI)
+    environment:
+      # This environment variable tells the Google Cloud TTS client where to find your service account key.
+      # You MUST mount your service account key file into the container at this path.
+      # Example: -v /path/to/your/local/key.json:/app/google-cloud-key.json in docker run, or
+      # define it below in the volumes section if you are managing the key within the compose file directly.
+      GOOGLE_APPLICATION_CREDENTIALS: /app/google-cloud-key.json
+    volumes:
+      # Mount your Google Cloud service account key file into the container.
+      # Replace './google-cloud-key.json' with the actual path to your key file on your host machine.
+      # It's recommended to place this key file *outside* your git repository for security.
+      - ./google-cloud-key.json:/app/google-cloud-key.json:ro # :ro means read-only
+      # Mount your chat history file/directory for persistence and analysis
+      # This ensures chat history is saved outside the container and persists across restarts
+      - ./chat_history:/app/Backend2/chat_history:rw # Host dir 'chat_history' maps to container's chat_history.json dir
+      # Note: The `chat_history.json` path in `voice_assistant_core.py` is `./Backend2/chat_history.json`.
+      # With this volume mount, `/app/Backend2/chat_history.json` inside the container
+      # will actually map to `./chat_history/chat_history.json` on the host.
+      # Adjust `CHAT_HISTORY_FILE` in `voice_assistant_core.py` if you prefer `/app/chat_history.json` for simplicity.
+      # If you change it, adjust the volume mount accordingly.
+      # For now, let's assume CHAT_HISTORY_FILE in voice_assistant_core.py is set to
+      # CHAT_HISTORY_FILE = "chat_history.json" and you mount the parent directory
+      # This makes it map to the container's /app/chat_history.json.
+      # So, let's update CHAT_HISTORY_FILE in voice_assistant_core.py to be just "chat_history.json"
+      # and ensure the volume mount is set correctly.
+      # Alternatively, keep CHAT_HISTORY_FILE = "./Backend2/chat_history.json"
+      # and map a *directory* on the host to /app/Backend2/ for persistence.
+      # Let's refine this to be more robust.
+      # Corrected volume mount for chat history persistence:
+      - backend_chat_history:/app/Backend2/chat_history.json # Named volume for chat history file
+                                                          # Or for directory containing it:
+                                                          # - backend_chat_history:/app/Backend2/database/chat_sessions # if storing in a dir
+    networks:
+      - kidwatch_network # Connects to the same network as Ollama
+    depends_on:
+      - ollama # Ensures Ollama starts before the backend
+
+  # Service for the Ollama Server
+  ollama:
+    image: ollama/ollama # Use the official Ollama Docker image
+    ports:
+      - "11434:11434" # Map host port 11434 to container port 11434 (Ollama default)
+    volumes:
+      - ollama_data:/root/.ollama # Persist Ollama data (models) outside the container
+    command: > # Command to run when the container starts
+      bash -c "ollama serve & 
+      sleep 5 && # Give Ollama server a moment to start
+      ollama pull llama3.2 # Pull the specific LLM model you are using
+      "
+    networks:
+      - kidwatch_network # Connects to the same network as the backend
+
+# Define named volumes for data persistence
+volumes:
+  ollama_data: # For Ollama models and data
+  backend_chat_history: # For your chat history file
+
+# Define a custom network so services can communicate by name
+networks:
+  kidwatch_network:
+    driver: bridge
