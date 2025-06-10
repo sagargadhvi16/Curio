@@ -1,17 +1,15 @@
-webrtcvad-wheels
-PyAudio
-whisper
-numpy
-ollama
-pyttsx3
-torch
-pydantic # ollama dependency
-colorama # ollama dependency
-requests # ollama dependency
-tqdm # common dependency for ML/AI libraries
 fastapi
-pydantic
 uvicorn
-groq
-matplotlib
+numpy # Still useful for general data handling, though not for whisper anymore
+pydantic
+requests
+tqdm # Often a transitive dependency, good to keep if not causing issues
+groq # Kept for interest_analysis.py if you decide to keep it as is
+matplotlib # Kept for interest_analysis.py
+
+# Google Cloud Client Libraries for STT, LLM (Gemini), and TTS
+google-cloud-speech
+google-cloud-aiplatform # For Gemini
 google-cloud-texttospeech
+google-auth # Required by many google-cloud-* libraries
+google-api-core # Required by many google-cloud-* libraries
