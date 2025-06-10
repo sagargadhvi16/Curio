@@ -1,19 +1,35 @@
+# docker-compose.yml
+version: '3.8' # Specify a recent Docker Compose file format version
+
 services:
+  # Service for your FastAPI Backend, now leveraging Google Cloud services
   backend:
     build:
       context: . # Build context is the project root (Curio folder)
       dockerfile: Dockerfile # Dockerfile is now in the project root
+      # --- ARGS MUST BE INDENTED UNDER 'build:' ---
+      args:
+        # --- IMPORTANT: REPLACE WITH YOUR ACTUAL GCP PROJECT ID AND LOCATION ---
+        GCP_PROJECT_ID: "your-gcp-project-id" # e.g., "my-awesome-kidwatch-project-12345"
+        GCP_LOCATION: "us-central1"           # e.g., "us-central1" (Vertex AI region for Gemini)
     ports:
       - "8000:8000" # Map host port 8000 to container port 8000 (FastAPI)
-    args:
-      # --- IMPORTANT: REPLACE WITH YOUR ACTUAL GCP PROJECT ID AND LOCATION ---
-      GCP_PROJECT_ID: "your-gcp-project-id" # e.g., "my-awesome-kidwatch-project-12345"
-      GCP_LOCATION: "us-central1"           # e.g., "us-central1" (Vertex AI region for Gemini)
     volumes:
       # Mount your Google Cloud service account key file into the container.
       # Replace './google-cloud-key.json' with the actual path to your key file on your host machine.
       - ./google-cloud-key.json:/app/google-cloud-key.json:ro # :ro means read-only
+
       # Mount a named volume for persistent chat history.
       - backend_chat_history:/app/Backend2/chat_history.json
     networks:
-      - kidwatch_network
+      - kidwatch_network # Connects to the defined network
+
+# Define named volumes for data persistence
+volumes:
+  backend_chat_history: # For your chat history file
+
+# Define a custom network
+networks:
+  kidwatch_network:
+    driver: bridge
+```
