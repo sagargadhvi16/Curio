@@ -1,4 +1,3 @@
-# docker-compose.yml
 version: '3.8' # Specify a recent Docker Compose file format version
 
 services:
@@ -10,8 +9,8 @@ services:
       # --- ARGS MUST BE INDENTED UNDER 'build:' ---
       args:
         # --- IMPORTANT: REPLACE WITH YOUR ACTUAL GCP PROJECT ID AND LOCATION ---
-        GCP_PROJECT_ID: "your-gcp-project-id" # e.g., "my-awesome-kidwatch-project-12345"
-        GCP_LOCATION: "us-central1"           # e.g., "us-central1" (Vertex AI region for Gemini)
+        GCP_PROJECT_ID: "curionextpoc" # e.g., "my-awesome-kidwatch-project-12345"
+        GCP_LOCATION: "global"           # e.g., "us-central1" (Vertex AI region for Gemini)
     ports:
       - "8000:8000" # Map host port 8000 to container port 8000 (FastAPI)
     volumes:
@@ -32,4 +31,3 @@ volumes:
 networks:
   kidwatch_network:
     driver: bridge
-```
