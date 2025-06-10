@@ -1,4 +1,3 @@
-# Use a slim Python 3.9 image as the base for a smaller footprint
 FROM python:3.9-slim-buster
 
 # Set the working directory inside the container
@@ -47,4 +46,3 @@ ENV GOOGLE_APPLICATION_CREDENTIALS=/app/google-cloud-key.json
 
 # Define the command to run your FastAPI application using Uvicorn.
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
-```
