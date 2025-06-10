@@ -53,4 +53,3 @@ ENV GOOGLE_APPLICATION_CREDENTIALS=/app/google-cloud-key.json
 # Define the command to run your FastAPI application using Uvicorn.
 # The app is located at /app/Backend2/api.py within the container.
 CMD ["uvicorn", "Backend2.api:app", "--host", "0.0.0.0", "--port", "8000"]
-```
