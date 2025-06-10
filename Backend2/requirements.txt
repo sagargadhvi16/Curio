@@ -1,0 +1,16 @@
+webrtcvad-wheels
+PyAudio
+whisper
+numpy
+ollama
+pyttsx3
+torch
+pydantic # ollama dependency
+colorama # ollama dependency
+requests # ollama dependency
+tqdm # common dependency for ML/AI libraries
+fastapi
+pydantic
+uvicorn
+groq
+matplotlib
