@@ -1,37 +1,44 @@
-# docker-compose.yml
-version: '3.8' # Specify a recent Docker Compose file format version
+# Use a slim Python 3.9 image as the base for a smaller footprint
+FROM python:3.9-slim-buster
 
-services:
-  # Service for your FastAPI Backend, now leveraging Google Cloud services
-  backend:
-    build:
-      context: ./Backend2 # Point to your Backend2 directory where Dockerfile is located
-      dockerfile: Dockerfile # Specify the Dockerfile name
-      args:
-        # --- IMPORTANT: REPLACE WITH YOUR ACTUAL GCP PROJECT ID AND LOCATION ---
-        GCP_PROJECT_ID: "your-gcp-project-id" # e.g., "my-awesome-kidwatch-project-12345"
-        GCP_LOCATION: "us-central1"           # e.g., "us-central1" (Vertex AI region for Gemini)
-    ports:
-      - "8000:8000" # Map host port 8000 to container port 8000 (FastAPI)
-    volumes:
-      # Mount your Google Cloud service account key file into the container.
-      # Replace './google-cloud-key.json' with the actual path to your key file on your host machine.
-      # This file should be in the same directory as your docker-compose.yml.
-      # It's recommended to place this key file *outside* your git repository for security.
-      - ./google-cloud-key.json:/app/google-cloud-key.json:ro # :ro means read-only
+# Set the working directory inside the container
+WORKDIR /app
 
-      # Mount a named volume for persistent chat history.
-      # This ensures chat_history.json is saved outside the container and persists across restarts.
-      # The internal path /app/Backend2/chat_history.json must match CHAT_HISTORY_FILE in voice_assistant_core.py
-      - backend_chat_history:/app/Backend2/chat_history.json
-    networks:
-      - kidwatch_network # Connects to the defined network
+# Install general build essentials and git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Define named volumes for data persistence
-volumes:
-  backend_chat_history: # For your chat history file
+# Copy requirements.txt from Backend2 to /app/Backend2
+COPY Backend2/requirements.txt /app/Backend2/requirements.txt
 
-# Define a custom network
-networks:
-  kidwatch_network:
-    driver: bridge
+# Install Python dependencies from Backend2/requirements.txt
+RUN pip install --no-cache-dir -r /app/Backend2/requirements.txt
+
+# Copy all Python source files from Backend2 to /app/Backend2
+COPY Backend2/api.py /app/Backend2/
+COPY Backend2/voice_assistant_core.py /app/Backend2/
+COPY Backend2/interest_analysis.py /app/Backend2/
+COPY Backend2/chat_history.json /app/Backend2/
+
+# Expose the port that FastAPI will run on.
+EXPOSE 8000
+
+# Define build arguments for GCP Project ID and Location.
+ARG GCP_PROJECT_ID
+ARG GCP_LOCATION
+
+# Set environment variables inside the container for FastAPI app to use.
+ENV GCP_PROJECT_ID=${GCP_PROJECT_ID}
+ENV GCP_LOCATION=${GCP_LOCATION}
+
+# Set the GOOGLE_APPLICATION_CREDENTIALS environment variable.
+# This assumes google-cloud-key.json is copied from the root context.
+COPY google-cloud-key.json /app/google-cloud-key.json
+ENV GOOGLE_APPLICATION_CREDENTIALS=/app/google-cloud-key.json
+
+# Define the command to run your FastAPI application using Uvicorn.
+# The app is located at /app/Backend2/api.py
+CMD ["uvicorn", "Backend2.api:app", "--host", "0.0.0.0", "--port", "8000"]
+```
