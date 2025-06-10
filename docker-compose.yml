@@ -1,44 +1,19 @@
-# Use a slim Python 3.9 image as the base for a smaller footprint
-FROM python:3.9-slim-buster
-
-# Set the working directory inside the container
-WORKDIR /app
-
-# Install general build essentials and git
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements.txt from Backend2 to /app/Backend2
-COPY Backend2/requirements.txt /app/Backend2/requirements.txt
-
-# Install Python dependencies from Backend2/requirements.txt
-RUN pip install --no-cache-dir -r /app/Backend2/requirements.txt
-
-# Copy all Python source files from Backend2 to /app/Backend2
-COPY Backend2/api.py /app/Backend2/
-COPY Backend2/voice_assistant_core.py /app/Backend2/
-COPY Backend2/interest_analysis.py /app/Backend2/
-COPY Backend2/chat_history.json /app/Backend2/
-
-# Expose the port that FastAPI will run on.
-EXPOSE 8000
-
-# Define build arguments for GCP Project ID and Location.
-ARG GCP_PROJECT_ID
-ARG GCP_LOCATION
-
-# Set environment variables inside the container for FastAPI app to use.
-ENV GCP_PROJECT_ID=${GCP_PROJECT_ID}
-ENV GCP_LOCATION=${GCP_LOCATION}
-
-# Set the GOOGLE_APPLICATION_CREDENTIALS environment variable.
-# This assumes google-cloud-key.json is copied from the root context.
-COPY google-cloud-key.json /app/google-cloud-key.json
-ENV GOOGLE_APPLICATION_CREDENTIALS=/app/google-cloud-key.json
-
-# Define the command to run your FastAPI application using Uvicorn.
-# The app is located at /app/Backend2/api.py
-CMD ["uvicorn", "Backend2.api:app", "--host", "0.0.0.0", "--port", "8000"]
-```
+services:
+  backend:
+    build:
+      context: . # Build context is the project root (Curio folder)
+      dockerfile: Dockerfile # Dockerfile is now in the project root
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000 (FastAPI)
+    args:
+      # --- IMPORTANT: REPLACE WITH YOUR ACTUAL GCP PROJECT ID AND LOCATION ---
+      GCP_PROJECT_ID: "your-gcp-project-id" # e.g., "my-awesome-kidwatch-project-12345"
+      GCP_LOCATION: "us-central1"           # e.g., "us-central1" (Vertex AI region for Gemini)
+    volumes:
+      # Mount your Google Cloud service account key file into the container.
+      # Replace './google-cloud-key.json' with the actual path to your key file on your host machine.
+      - ./google-cloud-key.json:/app/google-cloud-key.json:ro # :ro means read-only
+      # Mount a named volume for persistent chat history.
+      - backend_chat_history:/app/Backend2/chat_history.json
+    networks:
+      - kidwatch_network
