@@ -4,69 +4,70 @@ import glob
 from datetime import datetime, timedelta
 from collections import Counter
 import matplotlib.pyplot as plt
-from groq import Groq
+
+# Import Google Cloud Vertex AI for Gemini
+import vertexai
+from vertexai.generative_models import GenerativeModel, ChatSession
 
 # Function to load chat sessions from a directory
-def load_chat_sessions(directory="database/chat_sessions"):
+def load_chat_sessions(directory="./Backend2"): # Adjusted default directory for consistency with previous changes
     """Load chat history from all JSON files in a directory"""
     all_messages = []
     
     try:
-        # Check if the input is a directory or file
-        if os.path.isdir(directory):
-            files = glob.glob(os.path.join(directory, "*.json"))
+        # Construct path to chat_history.json within the specified directory
+        file_path = os.path.join(directory, "chat_history.json")
             
-            if not files:
-                print(f"No JSON files found in directory: {directory}")
-                return []
-                
-            for file_path in files:
-                try:
-                    with open(file_path, 'r') as file:
-                        session_data = json.load(file)
-                        # Handle both single session files and combined files
-                        if "items" in session_data:
-                            all_messages.extend(session_data["items"])
-                        else:
-                            all_messages.append(session_data)
-                except Exception as e:
-                    print(f"Error loading chat file {file_path}: {e}")
-        else:
-            # Handle single file input
-            with open(directory, 'r') as f:
-                data = json.load(f)
-                if "items" in data:
-                    all_messages.extend(data["items"])
+        if not os.path.exists(file_path):
+            print(f"Chat history file not found: {file_path}")
+            return []
+            
+        try:
+            with open(file_path, 'r') as file:
+                session_data = json.load(file)
+                # Handle both single session files and combined files
+                if "items" in session_data:
+                    all_messages.extend(session_data["items"])
                 else:
-                    all_messages.append(data)
+                    all_messages.append(session_data)
+        except Exception as e:
+            print(f"Error loading chat file {file_path}: {e}")
     except Exception as e:
         print(f"Error loading chat history: {e}")
     
     return all_messages
 
-# LLM API client (using Groq)
+# LLM API client (using Gemini via Vertex AI)
 class LLMClient:
-    def __init__(self, api_key=None):
-        self.api_key = os.environ.get("GROQ_API_KEY", api_key or "")
-        # Initialize the Groq client
-        self.client = Groq(api_key=self.api_key)
-        self.model = "llama-3.3-70b-versatile"
-    
-    def generate_insights(self, prompt):
-        """Send a prompt to the Groq LLM API and get a response."""
+    def __init__(self, project_id=None, location=None):
         try:
-            # Use the Groq client to generate a completion
-            chat_completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=500
+            # Initialize Vertex AI for Gemini access
+            # project_id and location should come from the environment or function args
+            vertexai.init(project=project_id, location=location)
+            self.model = GenerativeModel("gemini-1.5-flash") # Using a fast Gemini model
+            print(f"LLMClient: Vertex AI and Gemini model 'gemini-1.5-flash' initialized successfully for analysis.")
+        except Exception as e:
+            print(f"LLMClient Error: Failed to initialize Vertex AI / Gemini model: {e}")
+            print("Hint: Ensure 'GOOGLE_APPLICATION_CREDENTIALS' is set, billing is enabled, and 'Vertex AI' API is enabled for your project.")
+            self.model = None # Set to None if initialization fails
+
+    def generate_insights(self, prompt):
+        """Send a prompt to the Gemini LLM API and get a response."""
+        if self.model is None:
+            return "Error: LLM model not initialized."
+        try:
+            # Use the Gemini model to generate content
+            # For analysis, we can often use generate_content directly without a chat session
+            # if the prompt is self-contained.
+            response = self.model.generate_content(
+                prompt,
+                generation_config={"temperature": 0.7, "max_output_tokens": 500}
             )
             
             # Extract and return the generated content
-            return chat_completion.choices[0].message.content
+            return response.text
         except Exception as e:
-            print(f"Error calling Groq LLM API: {e}")
+            print(f"Error calling Gemini LLM API for insights: {e}")
             return "Error generating insights. Please try again later."
 
     def enrich_message_metadata(self, message_content):
@@ -86,11 +87,12 @@ class LLMClient:
         "{message_content}"
 
         Provide JSON output with:
-        1. category - Must be one of: "How Things Work", "Big Questions", "Creativity & Expression", "World & Cultures", "Nature & Life", "Self & Emotions"
-        2. subcategory - A more specific classification within the category
-        3. topic - The main subject of interest (1-2 words)
+        1. category - Must be one of: "How Things Work", "Big Questions", "Creativity & Expression", "World & Cultures", "Nature & Life", "Self & Emotions", "Other"
+        2. subcategory - A more specific classification within the category (1-3 words)
+        3. topic - The main subject of interest (1-2 words, lowercase)
 
-        Return only valid JSON like this:
+        Return only valid JSON. Ensure the JSON is properly formatted with double quotes for keys and string values.
+        Example:
         {{
           "category": "category name",
           "subcategory": "subcategory name",
@@ -99,10 +101,10 @@ class LLMClient:
         """
 
         try:
-            response = self.generate_insights(prompt)
+            response_text = self.generate_insights(prompt)
             
-            # Clean up response to ensure valid JSON
-            cleaned_response = response.strip()
+            # Clean up response to ensure valid JSON (LLMs sometimes wrap JSON in markdown)
+            cleaned_response = response_text.strip()
             if cleaned_response.startswith("```json"):
                 cleaned_response = cleaned_response[7:]
             if cleaned_response.startswith("```"):
@@ -111,7 +113,15 @@ class LLMClient:
                 cleaned_response = cleaned_response[:-3]
             
             cleaned_response = cleaned_response.strip()
-            metadata = json.loads(cleaned_response)
+            
+            # Attempt to parse JSON. Add a fallback if parsing fails.
+            try:
+                metadata = json.loads(cleaned_response)
+            except json.JSONDecodeError as jde:
+                print(f"JSON Decode Error for metadata: {jde}")
+                print(f"Raw response attempting to parse: {cleaned_response}")
+                # Fallback to a default structure if parsing fails
+                metadata = {}
             
             return {
                 "category": metadata.get("category", "Other"),
@@ -119,8 +129,8 @@ class LLMClient:
                 "topic": metadata.get("topic", "general").lower()
             }
         except Exception as e:
-            print(f"Error parsing metadata from LLM: {e}")
-            print(f"Raw response: {response}")
+            print(f"Error parsing metadata from LLM or generating insights: {e}")
+            print(f"Raw response that caused error: {response_text}")
             return {
                 "category": "Other",
                 "subcategory": "General",
@@ -133,12 +143,14 @@ def enrich_chat_history(messages, llm_client):
     enriched_messages = []
     
     for message in messages:
-        enriched_message = message.copy()
-        
         # Only enrich user messages and only if they don't already have metadata
         if message["role"] == "user" and "category" not in message:
+            print(f"Enriching message: {message['content']}")
             metadata = llm_client.enrich_message_metadata(message["content"])
+            enriched_message = message.copy() # Create a copy before modifying
             enriched_message.update(metadata)
+        else:
+            enriched_message = message.copy() # Always copy to avoid modifying original list items
         
         enriched_messages.append(enriched_message)
     
@@ -150,11 +162,18 @@ def filter_by_date_range(messages, start_date, end_date):
     
     for message in messages:
         try:
+            # Handle potential timezone info by making it timezone-naive or aware consistently
             message_date = datetime.fromisoformat(message["timestamp"])
+            # If message_date is timezone-aware, ensure start_date and end_date are also aware, or convert message_date to naive
+            # For simplicity, if timestamps are always local, comparing directly works.
+            # Otherwise, use .replace(tzinfo=None) or convert to UTC.
+            if message_date.tzinfo is not None:
+                message_date = message_date.replace(tzinfo=None)
+
             if start_date <= message_date <= end_date:
                 filtered_messages.append(message)
         except (KeyError, ValueError) as e:
-            print(f"Error processing message timestamp: {e}")
+            print(f"Error processing message timestamp '{message.get('timestamp')}': {e}. Skipping message.")
             continue
     
     return filtered_messages
@@ -189,9 +208,10 @@ def analyze_topics(messages):
     
     return most_common_topics
 
-# Function to create visual interest distribution
+# Function to create visual interest distribution (remains the same)
 def create_interest_distribution_chart(categories):
     if not categories:
+        print("No categories to chart.")
         return None
         
     plt.figure(figsize=(8, 8))
@@ -209,13 +229,18 @@ def create_interest_distribution_chart(categories):
         'Other': '#999999'
     }
     
-    plt.pie(sizes, labels=labels, autopct='%1.1f%%', colors=[colors.get(key, '#999999') for key in labels])
-    plt.axis('equal')
-    plt.title('Interest Distribution')
+    # Ensure all labels have a color, default to grey if not in map
+    pie_colors = [colors.get(label, '#999999') for label in labels]
+
+    plt.pie(sizes, labels=labels, autopct='%1.1f%%', colors=pie_colors, startangle=90)
+    plt.axis('equal') # Equal aspect ratio ensures that pie is drawn as a circle.
+    plt.title('Child Interest Distribution')
     
-    # Only save the chart, don't create any other files
+    # Only save the chart, don't create any other files.
+    # The path should be relative to where the API runs and potentially served.
     chart_path = 'interest_distribution.png'
     plt.savefig(chart_path)
+    plt.close() # Close the plot to free memory
     
     return chart_path
 
@@ -236,7 +261,7 @@ def generate_weekly_summary_llm(messages, llm_client):
     
     # Create a prompt for the LLM
     prompt = f"""
-    Generate a personalized weekly summary for a parent about their child's learning interests.
+    Generate a personalized weekly summary for a parent about their child's learning interests based on conversation topics.
     
     The child explored these topics this week (topic and count):
     {topics_str}
@@ -291,9 +316,11 @@ def generate_conversation_starters_llm(messages, llm_client):
         if cleaned_response.startswith("```json"):
             cleaned_response = cleaned_response[7:]
         if cleaned_response.startswith("```"):
-            cleaned_response = cleaned_response[3:]
+            cleaned_response = cleaned_codes[3:]
         if cleaned_response.endswith("```"):
             cleaned_response = cleaned_response[:-3]
+        if cleaned_response.endswith("```json"): # Catch cases where it might end with ```json unexpectedly
+            cleaned_response = cleaned_response[:-7]
         
         cleaned_response = cleaned_response.strip()
         
@@ -308,7 +335,7 @@ def generate_conversation_starters_llm(messages, llm_client):
         else:
             raise ValueError("Response is not in expected format")
     except Exception as e:
-        print(f"Error parsing LLM response as JSON: {e}")
+        print(f"Error parsing LLM response as JSON for conversation starters: {e}")
         print(f"Raw response: {response}")
         return ["What was your favorite thing you learned about this week?", 
                 "What are you most curious about right now?", 
@@ -362,6 +389,8 @@ def generate_suggested_activities_llm(messages, llm_client):
             cleaned_response = cleaned_response[3:]
         if cleaned_response.endswith("```"):
             cleaned_response = cleaned_response[:-3]
+        if cleaned_response.endswith("```json"): # Catch cases where it might end with ```json unexpectedly
+            cleaned_response = cleaned_response[:-7]
         
         cleaned_response = cleaned_response.strip()
         
@@ -376,18 +405,23 @@ def generate_suggested_activities_llm(messages, llm_client):
         else:
             raise ValueError("Response is not in expected format")
     except Exception as e:
-        print(f"Error parsing LLM response as JSON: {e}")   
+        print(f"Error parsing LLM response as JSON for suggested activities: {e}")   
         print(f"Raw response: {response}")
         return ["Build a model related to your child's interests", 
                 "Plan a field trip to explore topics in real life", 
                 "Start a small project that builds on their questions"]
 
 # Main function to analyze the past week
-def analyze_past_week(chat_directory="database/chat_sessions", api_key=None):
-    # Initialize LLM client
-    llm_client = LLMClient(api_key=api_key)
+def analyze_past_week(chat_directory="./Backend2", project_id=None, location=None):
+    # Initialize LLM client with GCP project and location for Vertex AI
+    llm_client = LLMClient(project_id=project_id, location=location)
     
-    # Load all chat sessions
+    if llm_client.model is None:
+        return {
+            "error": "LLM client could not be initialized. Check GCP credentials and Vertex AI setup."
+        }
+
+    # Load all chat sessions from the chat_history.json file
     all_messages = load_chat_sessions(chat_directory)
     
     if not all_messages:
@@ -404,10 +438,11 @@ def analyze_past_week(chat_directory="database/chat_sessions", api_key=None):
     
     if not weekly_messages:
         return {
-            "error": "No chat messages found for the past week."
+            "error": "No chat messages found for the past week in the last week."
         }
     
     # Enrich chat history with metadata
+    # This step involves LLM calls
     enriched_messages = enrich_chat_history(weekly_messages, llm_client)
     
     # Analyze interest distribution
@@ -416,7 +451,7 @@ def analyze_past_week(chat_directory="database/chat_sessions", api_key=None):
     # Create chart
     chart_path = create_interest_distribution_chart(category_percentages)
     
-    # Analyze topics
+    # Analyze topics (this is internal and can be displayed raw or summarized)
     topics = analyze_topics(enriched_messages)
     
     # Generate weekly summary using LLM
@@ -431,20 +466,21 @@ def analyze_past_week(chat_directory="database/chat_sessions", api_key=None):
     # Create report
     report = {
         "interest_distribution": dict(category_percentages),
-        # "topics": [(topic, count) for topic, count in topics],
+        "top_topics": [(topic, count) for topic, count in topics[:5]], # Return top 5 topics
         "weekly_summary": summary,
         "conversation_starters": starters,
         "suggested_activities": activities,
-        "chart_path": chart_path
+        "chart_path": chart_path # Path to the generated chart image
     }
 
     return report
 
-def run_analysis():
+def run_analysis(project_id=None, location=None):
+    """
+    Wrapper function to run the full chat analysis pipeline.
+    project_id and location are passed for Vertex AI initialization.
+    """
+    chat_directory = "Backend2/" # This should align with where chat_history.json is
+    report = analyze_past_week(chat_directory, project_id, location)
     
-    api_key='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'
-    chat_directory = "Backend2/"
-    report = analyze_past_week(chat_directory, api_key)
-    
-    # Print the report
     return report
