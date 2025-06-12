@@ -1,0 +1,7 @@
+pandas
+matplotlib
+requests
+python-dotenv
+groq
+flask-cors
+livekit-agents[groq,silero,turn-detector]~=1.0rc
