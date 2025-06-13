@@ -32,3 +32,35 @@ ENV/
 build/
 dist/
 *.egg-info/
+
+# Node modules (add this to prevent accidental commits of node dependencies)
+node_modules/
+
+# Logs
+*.log
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS generated files
+Icon?
+Desktop.ini
+
+# Coverage reports
+htmlcov/
+.coverage
+.tox/
+.nox/
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Test output
+test-results/
+
+# Temporary files
+*.tmp
+*.temp
