@@ -1,0 +1,14 @@
+numpy # Still useful for general data handling, though not for whisper anymore
+pydantic
+requests
+fastapi
+uvicorn
+google-cloud-speech
+google-cloud-texttospeech
+google-cloud-aiplatform
+pydantic
+python-multipart
+matplotlib
+seaborn
+google-auth # Required by many google-cloud-* libraries
+google-api-core # Required by many google-cloud-* libraries
